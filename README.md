@@ -6,17 +6,21 @@ This package provides the tools to compute the time-independant EM field created
 
 First download the repository and extract it where you want. Then, run in your python environment 
 
-`bash`
-pip install path\\to\\package\\OptiLat
+```bash
+pip install path/to/package/OptiLat
+```
 
 or 
 
-`bash`
-pip install -e path\\to\\package\\OptiLat
+```bash
+pip install -e path/to/package/OptiLat
+```
 
 if you want to be able to modify it in place.
 
 **N.B** : This package requires the `bloch_schrodinger` package to make use of it's most powerful methods.
+It is only imported when needed, so `Beam`, `OptiLat.compute_fields` and the formatting helpers work
+without it; only the interactive `OptiLat.plot` method requires it.
 
 ## Getting started
 
