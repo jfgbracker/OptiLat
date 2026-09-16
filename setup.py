@@ -17,7 +17,7 @@ DESCRIPTION = 'An optical lattice builder.'
 URL = 'https://github.com/GuillotMartin/OptiLat'
 EMAIL = 'guillotmartin@yahoo.com'
 AUTHOR = 'Martin Guillot'
-REQUIRES_PYTHON = '>=3.12.0'
+REQUIRES_PYTHON = '>=3.11'
 VERSION = '0.1.0'
     
 # What packages are required for this module to be executed?

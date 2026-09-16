@@ -7,10 +7,10 @@ from matplotlib.figure import Figure
 from ipywidgets import VBox, interactive_output
 from IPython.display import display
 
-type treal = Union[float, xr.DataArray]
-type tcomplex = Union[complex, xr.DataArray]
-type tpolar = Union[list[tcomplex, tcomplex], xr.DataArray]
-type vec3d = Union[list[treal, treal, treal], xr.DataArray]
+treal = Union[float, xr.DataArray]
+tcomplex = Union[complex, xr.DataArray]
+tpolar = Union[list[tcomplex, tcomplex], xr.DataArray]
+vec3d = Union[list[treal, treal, treal], xr.DataArray]
 
 # Below this in-plane norm, a direction is treated as purely vertical (+-z) and the
 # TE/TM basis is chosen by convention instead of from the (undefined) in-plane part.
