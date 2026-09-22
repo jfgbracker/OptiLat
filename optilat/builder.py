@@ -85,6 +85,8 @@ class Beam:
         k: Union[treal, vec3d] = None,
         direction: vec3d = None,
         polar: tpolar = None,
+        waist: Union[treal, list[treal, treal]] = None,
+        focus: vec3d = None,
     ):
         """The Beam class contains simple functions to handle laser-generated plane waves ofr optical lattice construction.
         It supports xarray broadcast rules on every input. A beam's k-vector can be given as a wavelength + direction,
@@ -103,6 +105,12 @@ class Beam:
             The first component is always in the xy plane. It is used as given, without renormalization, so that
             the norm of the resulting complex amplitude is |amplitude| times the norm of the Jones vector.
             Defaults to [1,0].
+            waist (Union[treal, list[treal, treal]], optional): The beam waist (1/e^2 intensity radius at focus).
+            If given, the beam is a Gaussian beam in the paraxial approximation instead of a plane wave. A pair
+            [waist_TE, waist_TM] gives an elliptical beam, with the two waists along the TE and TM axes.
+            Defaults to None, i.e. a plane wave.
+            focus (vec3d, optional): The position of the beam's focus (waist). Only used for Gaussian beams.
+            Defaults to [0,0,0].
         """
 
         self.amplitude = amplitude  # Amplitude of the beam
@@ -150,8 +158,25 @@ class Beam:
         self.TE, self.TM = self.compute_3d_Polar()
         self.A = self.compute_Camplitude()
 
+        # Gaussian beam parameters, stored as (TE axis, TM axis) pairs. None means a plane wave.
+        if waist is None:
+            self.waist = None
+        elif isinstance(waist, (list, tuple)) or (
+            isinstance(waist, np.ndarray) and waist.ndim > 0
+        ):
+            if len(waist) != 2:
+                raise ValueError("waist must be a scalar or a pair [waist_TE, waist_TM].")
+            self.waist = (waist[0], waist[1])
+        else:
+            self.waist = (waist, waist)
+
+        if self.waist is not None:
+            self.zR = tuple(self.kl * w**2 / 2 for w in self.waist)  # Rayleigh ranges
+        self.focus: xr.DataArray = format_3dvec([0, 0, 0] if focus is None else focus)
+
     def __repr__(self):
-        return f"A beam with k-vector: {self.kl}, \ndirection {self.direction} \nand polarization {self.polar}"
+        shape = "a plane wave" if self.waist is None else f"a Gaussian beam of waist {self.waist}"
+        return f"A beam with k-vector: {self.kl}, \ndirection {self.direction} \nand polarization {self.polar}, \nas {shape}"
 
     def compute_3d_Polar(self) -> tuple[xr.DataArray, xr.DataArray]:
         """Compute the TE and TM unit vectors' components in the cartesian basis.
@@ -201,6 +226,39 @@ class Beam:
         A = A + self.TM * self.polar[{"Jones": 1}] * self.amplitude
 
         return A
+
+    def compute_envelope(self, x: treal = 0, y: treal = 0, z: treal = 0) -> tcomplex:
+        """Returns the complex envelope of the beam, relative to the plane wave exp(1j * k.r), so that the
+        full EM-field is Ei = Re[Ai * envelope(r) * exp(1j * (k.r - w.t))]. It is 1 for a plane wave.
+
+        For a Gaussian beam, the paraxial envelope is written with local coordinates relative to the focus:
+        the propagation distance zl and the transverse coordinates u_TE, u_TM along the TE and TM axes.
+        Along each transverse axis, with q = 1 + 1j * zl / zR, the envelope is q**-0.5 * exp(-u**2 / (w**2 * q)),
+        which contains the beam's width, wavefront curvature and Gouy phase. The longitudinal field
+        component that appears beyond the paraxial approximation is neglected.
+
+        Args:
+            x (treal, optional): The x-coordinate where to evaluate the envelope. Defaults to 0.
+            y (treal, optional): Same for the y-coordinate. Defaults to 0.
+            z (treal, optional): Same for the z-coordinate. Defaults to 0.
+
+        Returns:
+            tcomplex: The complex envelope, equal to 1 at the focus.
+        """
+        if self.waist is None:
+            return 1
+
+        r = [c - self.focus[{"component": i}] for i, c in enumerate((x, y, z))]
+
+        def project(axis: xr.DataArray) -> xr.DataArray:
+            return sum(axis[{"component": i}] * r[i] for i in range(3))
+
+        zl = project(self.direction)  # Distance from the focus along the propagation
+        envelope = 1
+        for axis, w, zR in zip((self.TE, self.TM), self.waist, self.zR):
+            q = 1 + 1j * zl / zR
+            envelope = envelope * q**-0.5 * xr.ufuncs.exp(-project(axis) ** 2 / (w**2 * q))
+        return envelope
 
 
 class OptiLat:
@@ -283,7 +341,7 @@ class OptiLat:
                 + beam.k[{"component": 1}] * y
                 + beam.k[{"component": 2}] * z
             )
-            ToAdd = beam.A * xr.ufuncs.exp(1j * kdr)
+            ToAdd = beam.A * xr.ufuncs.exp(1j * kdr) * beam.compute_envelope(x, y, z)
             layers[co] = ToAdd if co not in layers else layers[co] + ToAdd
 
         Fields = xr.concat(
